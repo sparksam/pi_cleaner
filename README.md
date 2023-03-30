@@ -39,4 +39,4 @@ options:
 ```
 
 ## Author
-(Samuel Klutse)[https://samuelklutse.com] ☕️
+- @sparksam ☕️
