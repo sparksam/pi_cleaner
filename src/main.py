@@ -109,9 +109,45 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate):
                 showexec(r.status_code, r.json().get(
                     'status'), r.json()['msg'])
             else:
-                showexec(r.status_code, r.json().get('status'), r.json())
+                task_id = r.json().get('task_id')
+                check_scan(task_id, key, portal_url, session)
         except Exception as ex:
             showexec(r.status_code, None, r.text, exception=ex)
+
+def delete_file(path):
+    try:
+        os.remove(path)
+    except OSError as e:
+        print("Error: %s : %s" % (path, e.strerror))
+        pass
+
+
+def check_scan(task_id, key, portal_url, session, delete_level="low"):
+    """
+    Vérifier l'état d'un scan et afficher le niveau de risque pour chaque résultat
+    """
+    url = f"{portal_url}/orion/api/v3.0/tasks/{task_id}"
+    headers = {'apikey': key}
+        
+    r = session.get(url, headers=headers)
+    if r.status_code == 200:
+        result = r.json().get('result')
+        if result:
+            for file in result:
+                if 'risk' in file and "global" in file['risk']:
+                    risk = file['risk']['global']
+                    if risk == "Low":
+                        print(f"{file['filename']}: {Colors.GREEN}{risk.capitalize()}{Colors.NO}")
+                    elif risk == "Medium":
+                        print(f"{file['filename']}: {Colors.ORANGE}{risk.capitalize()}{Colors.NO}")
+                    elif risk == "High":
+                        print(f"{file['filename']}: {Colors.RED}{risk.capitalize()}{Colors.NO}")
+                    elif risk == "Severe":
+                        print(f"{file['filename']}: {Colors.RED}{risk.capitalize()}{Colors.NO}")
+                    if risk.lower() == delete_level.lower():
+                        delete_file(file['filename'])
+    else:
+        showexec(r.status_code, "Failed", "Scan failed")
 
 
 def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str):
@@ -155,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--format', help="Format the device", action='store_true')
     parser.add_argument(
-        '--delete-malwares', help="Delete malicious files", action='store_true')
+        '--delete-malwares', help="Delete malicious files, by specifying the risk threshold.", type=str, default='low', choices=['low', 'medium', 'high', 'severe'])
     args = parser.parse_args()
     env = Path(__file__).parent.parent / '.env'
     if env.exists():
