@@ -62,7 +62,7 @@ def showexec(code, status, description, exception=None):
     sys.stdout.flush()
 
 
-def send_file(path, portal_url, visibility, session, key, tls_certificate):
+def send_file(path, portal_url, visibility, session, key, tls_certificate, risk_level):
     """
     La valeur 'user' indique le login
     La valeur 'force' indique si on veut forcer une reanalyse
@@ -110,7 +110,7 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate):
                     'status'), r.json()['msg'])
             else:
                 task_id = r.json().get('task_id')
-                check_scan(task_id, key, portal_url, session)
+                check_scan(task_id, key, portal_url, session, risk_level)
         except Exception as ex:
             showexec(r.status_code, None, r.text, exception=ex)
 
@@ -151,7 +151,7 @@ def check_scan(task_id, key, portal_url, session, delete_level="low"):
         showexec(r.status_code, "Failed", "Scan failed")
 
 
-def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str):
+def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str, risk_level: str):
     """
     Scan files with Orion
     """
@@ -164,7 +164,7 @@ def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certif
                 n = os.path.join(root, i)
                 try:
                     send_file(n, portal_url, visibility,
-                              session, key, tls_certificate)
+                              session, key, tls_certificate, risk_level)
                 except Exception as e:
                     print("%s : %s" % (n, str(e)))
     else:
@@ -210,4 +210,4 @@ if __name__ == "__main__":
             print("Orion API key is required")
             exit(1)
         orion_scan(args.path, portal_url,  args.visibility,
-                   args.key, args.tls_certificate)
+                   args.key, args.tls_certificate, args.delete_malwares)
