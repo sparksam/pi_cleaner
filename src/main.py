@@ -115,6 +115,7 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate):
             showexec(r.status_code, None, r.text, exception=ex)
 
 def delete_file(path):
+    print(f"Deleting {path}")
     try:
         os.remove(path)
     except OSError as e:
