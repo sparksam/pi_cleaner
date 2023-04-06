@@ -62,7 +62,7 @@ def showexec(code, status, description, exception=None):
     sys.stdout.flush()
 
 
-def send_file(path, portal_url, visibility, session, key, tls_certificate, risk_level):
+def send_file(path, portal_url, visibility, session, key, tls_certificate):
     """
     La valeur 'user' indique le login
     La valeur 'force' indique si on veut forcer une reanalyse
@@ -71,7 +71,7 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate, risk_
     with open(path, 'rb') as f:
         data = f.read()
 
-    url = portal_url + '/orion/api/v3.0/tasks'
+    url = portal_url + '/orion/api/v4.0/tasks'
 
     json_data = {
         'filename': os.path.basename(path),
@@ -104,18 +104,22 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate, risk_
     if r.status_code == 405 or r.status_code == 502:
         showexec(r.status_code, "Failed", "Host may be not reachable ?")
     else:
+
         try:
+            # print(r.json())
             if 'msg' in r.json():
                 showexec(r.status_code, r.json().get(
                     'status'), r.json()['msg'])
             else:
-                task_id = r.json().get('task_id')
-                check_scan(task_id, key, portal_url, session, risk_level)
+                task_id = r.json()['task']['$oid']
+                # print(task_id)
+                check_scan(task_id, key, portal_url, session)
         except Exception as ex:
+            print(ex)
             showexec(r.status_code, None, r.text, exception=ex)
 
+
 def delete_file(path):
-    print(f"Deleting {path}")
     try:
         os.remove(path)
     except OSError as e:
@@ -127,35 +131,38 @@ def check_scan(task_id, key, portal_url, session, delete_level="low"):
     """
     Vérifier l'état d'un scan et afficher le niveau de risque pour chaque résultat
     """
-    url = f"{portal_url}/orion/api/v3.0/tasks/{task_id}"
-    headers = {'apikey': key}
-        
+
+    url = f"{portal_url}/orion/api/v4.0/tasks/id={task_id}"
+    headers = {'apikey': key, 'Content-Type': 'application/json'}
     r = session.get(url, headers=headers)
-    if r.status_code == 200:
-        result = r.json().get('result')
+    if int(r.status_code) in [200, 201]:
+        result = [r.json()['task']]
         if result:
             for file in result:
                 if 'risk' in file and "global" in file['risk']:
                     risk = file['risk']['global']
-                    if risk == "Low":
-                        print(f"{file['filename']}: {Colors.GREEN}{risk.capitalize()}{Colors.NO}")
+                    if risk in ["Low", "Safe", "N/A"]:
+                        print(
+                            f"{file['filename']}: {Colors.GREEN}{risk.upper()}{Colors.NO}")
                     elif risk == "Medium":
-                        print(f"{file['filename']}: {Colors.ORANGE}{risk.capitalize()}{Colors.NO}")
+                        print(
+                            f"{file['filename']}: {Colors.ORANGE}{risk.upper()}{Colors.NO}")
                     elif risk == "High":
-                        print(f"{file['filename']}: {Colors.RED}{risk.capitalize()}{Colors.NO}")
+                        print(
+                            f"{file['filename']}: {Colors.RED}{risk.upper()}{Colors.NO}")
                     elif risk == "Severe":
-                        print(f"{file['filename']}: {Colors.RED}{risk.capitalize()}{Colors.NO}")
+                        print(
+                            f"{file['filename']}: {Colors.RED}{risk.upper()}{Colors.NO}")
                     if risk.lower() == delete_level.lower():
                         delete_file(file['filename'])
     else:
         showexec(r.status_code, "Failed", "Scan failed")
 
 
-def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str, risk_level: str):
+def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str):
     """
     Scan files with Orion
     """
-
     session = requests.Session()
     print(f"Scanning {path} files with Orion at {portal_url}")
     if os.path.isdir(path):
@@ -164,7 +171,7 @@ def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certif
                 n = os.path.join(root, i)
                 try:
                     send_file(n, portal_url, visibility,
-                              session, key, tls_certificate, risk_level)
+                              session, key, tls_certificate)
                 except Exception as e:
                     print("%s : %s" % (n, str(e)))
     else:
@@ -210,4 +217,4 @@ if __name__ == "__main__":
             print("Orion API key is required")
             exit(1)
         orion_scan(args.path, portal_url,  args.visibility,
-                   args.key, args.tls_certificate, args.delete_malwares)
+                   args.key, args.tls_certificate)
