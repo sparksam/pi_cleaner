@@ -62,7 +62,7 @@ def showexec(code, status, description, exception=None):
     sys.stdout.flush()
 
 
-def send_file(path, portal_url, visibility, session, key, tls_certificate):
+def send_file(path, portal_url, visibility, session, key, tls_certificate, delete_level):
     """
     La valeur 'user' indique le login
     La valeur 'force' indique si on veut forcer une reanalyse
@@ -113,13 +113,15 @@ def send_file(path, portal_url, visibility, session, key, tls_certificate):
             else:
                 task_id = r.json()['task']['$oid']
                 # print(task_id)
-                check_scan(task_id, key, portal_url, session)
+                check_scan(task_id, key, portal_url,
+                           session, path, delete_level)
         except Exception as ex:
             print(ex)
             showexec(r.status_code, None, r.text, exception=ex)
 
 
 def delete_file(path):
+    # print(f"Removing Path {path}")
     try:
         os.remove(path)
     except OSError as e:
@@ -127,7 +129,7 @@ def delete_file(path):
         pass
 
 
-def check_scan(task_id, key, portal_url, session, delete_level="low"):
+def check_scan(task_id, key, portal_url, session, path, delete_level="low"):
     """
     Vérifier l'état d'un scan et afficher le niveau de risque pour chaque résultat
     """
@@ -135,7 +137,9 @@ def check_scan(task_id, key, portal_url, session, delete_level="low"):
     url = f"{portal_url}/orion/api/v4.0/tasks/id={task_id}"
     headers = {'apikey': key, 'Content-Type': 'application/json'}
     r = session.get(url, headers=headers)
+    # print(r.status_code)
     if int(r.status_code) in [200, 201]:
+        # print(r.json())
         result = [r.json()['task']]
         if result:
             for file in result:
@@ -154,15 +158,16 @@ def check_scan(task_id, key, portal_url, session, delete_level="low"):
                         print(
                             f"{file['filename']}: {Colors.RED}{risk.upper()}{Colors.NO}")
                     if risk.lower() == delete_level.lower():
-                        delete_file(file['filename'])
+                        delete_file(path)
     else:
         showexec(r.status_code, "Failed", "Scan failed")
 
 
-def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str):
+def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certificate: str, delete_level):
     """
     Scan files with Orion
     """
+
     session = requests.Session()
     print(f"Scanning {path} files with Orion at {portal_url}")
     if os.path.isdir(path):
@@ -171,11 +176,12 @@ def orion_scan(path: str, portal_url: str, visibility: str, key: str, tls_certif
                 n = os.path.join(root, i)
                 try:
                     send_file(n, portal_url, visibility,
-                              session, key, tls_certificate)
+                              session, key, tls_certificate, delete_level)
                 except Exception as e:
                     print("%s : %s" % (n, str(e)))
     else:
-        send_file(path, portal_url, visibility, session, key, tls_certificate)
+        send_file(path, portal_url, visibility, session,
+                  key, tls_certificate, delete_level)
 
 
 if __name__ == "__main__":
@@ -199,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--format', help="Format the device", action='store_true')
     parser.add_argument(
-        '--delete-malwares', help="Delete malicious files, by specifying the risk threshold.", type=str, default='low', choices=['low', 'medium', 'high', 'severe'])
+        '--delete-malwares', help="Delete malicious files, by specifying the risk threshold.", type=str, default='low', choices=['low', 'medium', 'high', 'severe', "safe", "n/a"])
     args = parser.parse_args()
     env = Path(__file__).parent.parent / '.env'
     if env.exists():
@@ -217,4 +223,4 @@ if __name__ == "__main__":
             print("Orion API key is required")
             exit(1)
         orion_scan(args.path, portal_url,  args.visibility,
-                   args.key, args.tls_certificate)
+                   args.key, args.tls_certificate, args.delete_malwares)
